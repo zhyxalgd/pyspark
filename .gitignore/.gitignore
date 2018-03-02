@@ -1,0 +1,50 @@
+import json
+import time
+import sys
+from pyspark.sql import SQLContext
+sqc = SQLContext(sc)
+# sqc = sqlContext
+start_time = time.time()
+df = sqc.read.format('org.apache.kudu.spark.kudu').option('kudu.master','34.124.12.2340:7051').option('kudu.table','impala::default.e_kudu').load() 
+print 'Time of connecting to DB is', (time.time() - start_time)
+print 'The line of param in DB is',format(df.count())  #41554134条
+df.registerTempTable('prism_table')
+defect_table=sqc.sql("""select * from prism_table  where track_in_time >= 1342137600000 and track_in_time <= 1502668799999 and product_id in ('TA27502BBV00') and equip_id in ('AOV600')""" )  ##104990条
+print 'Time of computing sql is', (time.time() - start_time)
+print 'The line of sql result is',format(defect_table.count())
+if defect_table.select('lot_id').distinct().count()<10000:
+    df_json = defect_table.groupby('glass_id').pivot('lot_id').agg({'equip_id':'count'})
+    print 'Time of pivot computing is', (time.time() - start_time)
+    # print time.time()
+    # time_local = time.localtime(time.time())
+    # print time_local
+    # dt = time.strftime("%Y-%m-%d %H:%M:%S",time_local)#转换成新的时间格式(2016-05-05 20:28:54)
+    # print dt
+    '''
+    a=0
+    while 1:
+        if time.time() - start_time > 5*60:
+            print 'It cost beyond 5min in pivot'#pivot前耗费时间不超5min
+            break
+        a=a+1
+    print a
+    '''
+    # if time.time() - start_time > 5*60:
+    #     print 'Warning: It cost beyound 5min in pivot'#pivot前耗费时间不超5min
+        # sys.exit()
+#     print(defect_table.select('lot_id').distinct().count())
+#     print(type(df_json))
+    print 'The line of pivot result is',format(df_json.count()) #104990条
+    print 'The column of pivot result is',len(df_json.columns)
+#     # df_json.show(2)
+#     # df_json = df_json.limit(10000).collect()
+#     # # df_json = df_json.limit(100).toJSON().collect()
+    if df_json.count()>10000:
+        df_json = df_json.limit(10).toJSON().collect()
+    else:
+        df_json = df_json.toJSON().collect()
+    print 'Time of converting to JSON is',(time.time() - start_time) 
+    print("pivotData = ["+','.join(df_json[0:5])+"]")
+    
+else:
+    print 'errorMsg=MaxColumn'
